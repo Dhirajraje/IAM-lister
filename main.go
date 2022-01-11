@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aws/aws-lambda-go/lambda"
+//	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -21,7 +21,7 @@ type Response struct {
 	Arn        string `json:"user_arn"`
 }
 
-func HandleLambdaEvent() {
+func IamLister() string {
 	sess, err := session.NewSession(&aws.Config{})
 	days, _ := strconv.Atoi(os.Getenv("DAYS"))
 	// Handle client error
@@ -31,7 +31,7 @@ func HandleLambdaEvent() {
 		// List users
 		result, err := svciam.ListUsers(&iam.ListUsersInput{MaxItems: aws.Int64(1)})
 		if err != nil {
-			fmt.Println("Error" + err.Error())
+			return "Error" + err.Error()
 		} else {
 			users := result.Users
 			isTruncated := *result.IsTruncated
@@ -73,13 +73,14 @@ func HandleLambdaEvent() {
 				}
 			}
 			res, _ := json.MarshalIndent(oldUsers, "", "  ")
-			fmt.Println(string(res))
+			return string(res)
 		}
 	} else {
-		fmt.Println("Error while initilizing session" + err.Error())
+		return "Error while initilizing session" + err.Error()
 	}
 }
 
 func main() {
-	lambda.Start(HandleLambdaEvent)
+//	lambda.Start(HandleLambdaEvent)
+	fmt.Println(IamLister())
 }
