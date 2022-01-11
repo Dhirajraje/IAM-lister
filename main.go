@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,33 +13,29 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 )
 
-type response struct {
-	users    []*iam.User
-	messgage string
+type Response struct {
+	UserId     string `json:"user_id"`
+	User       string `json:"user_name"`
+	LastUsedOn string `json:"last_used_on"`
+	CreatedOn  string `json:"created_on"`
+	Arn        string `json:"user_arn"`
 }
 
 func HandleLambdaEvent() {
 	sess, err := session.NewSession(&aws.Config{})
-	days, err := strconv.Atoi(os.Getenv("DAYS"))
-	if err != nil {
-		fmt.Println("DAYS not configured correctly, moving forward with 30 days")
-		days = 30
-	}
+	days, _ := strconv.Atoi(os.Getenv("DAYS"))
 	// Handle client error
 	if err == nil {
 		// Create a IAM service client.
 		svciam := iam.New(sess)
 		// List users
 		result, err := svciam.ListUsers(&iam.ListUsersInput{MaxItems: aws.Int64(1)})
-
 		if err != nil {
-			fmt.Println("Error", err)
-			return
+			fmt.Println("Error" + err.Error())
 		} else {
 			users := result.Users
 			isTruncated := *result.IsTruncated
 			maker := result.Marker
-
 			for isTruncated {
 				result, err := svciam.ListUsers(&iam.ListUsersInput{Marker: maker})
 				if err == nil {
@@ -46,39 +43,41 @@ func HandleLambdaEvent() {
 					maker = result.Marker
 					users = append(users, result.Users...)
 				} else {
-					fmt.Print(err)
+					fmt.Println(err.Error())
 					break
 				}
 			}
-			oldUsers := []*iam.User{}
+			oldUsers := []Response{}
 			for _, user := range users {
-				timeAgo := time.Now().UTC().Add(time.Duration(days * 24 * int(time.Hour)))
+				timeAgo := time.Now().UTC().Add(time.Duration(-days * 24 * int(time.Hour)))
 				if user.PasswordLastUsed != nil {
-					if timeAgo.Before(*user.PasswordLastUsed) {
-						oldUsers = append(oldUsers, user)
+					if timeAgo.After(*user.PasswordLastUsed) {
+						oldUsers = append(oldUsers, Response{
+							User:       *user.UserName,
+							LastUsedOn: user.PasswordLastUsed.String(),
+							CreatedOn:  user.CreateDate.String(),
+							Arn:        *user.Arn,
+							UserId:     *user.UserId,
+						})
 					}
 				} else {
-					if timeAgo.Before(*user.CreateDate) {
-						oldUsers = append(oldUsers, user)
+					if timeAgo.After(*user.CreateDate) {
+						oldUsers = append(oldUsers, Response{
+							User:       *user.UserName,
+							LastUsedOn: "Never used",
+							CreatedOn:  user.CreateDate.String(),
+							Arn:        *user.Arn,
+							UserId:     *user.UserId,
+						})
 					}
 				}
-
 			}
-
-			fmt.Print(oldUsers)
-			// for i, user := range result.Users {
-			// 	if user == nil {
-			// 		continue
-			// 	}
-			// 	fmt.Print(user)
-			// 	fmt.Printf("%d user %s created %v\n", i, *user.UserName, user.CreateDate)
-			// }
+			res, _ := json.MarshalIndent(oldUsers, "", "  ")
+			fmt.Println(string(res))
 		}
-
 	} else {
-		fmt.Print("Error while initilizing session", err)
+		fmt.Println("Error while initilizing session" + err.Error())
 	}
-
 }
 
 func main() {
