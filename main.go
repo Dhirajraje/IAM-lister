@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"time"
 
-//	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/sns"
 )
 
 type Response struct {
@@ -24,11 +25,8 @@ type Response struct {
 func IamLister() string {
 	sess, err := session.NewSession(&aws.Config{})
 	days, _ := strconv.Atoi(os.Getenv("DAYS"))
-	// Handle client error
 	if err == nil {
-		// Create a IAM service client.
 		svciam := iam.New(sess)
-		// List users
 		result, err := svciam.ListUsers(&iam.ListUsersInput{MaxItems: aws.Int64(1)})
 		if err != nil {
 			return "Error" + err.Error()
@@ -80,7 +78,32 @@ func IamLister() string {
 	}
 }
 
+func SnsMessageSender(Message string) string {
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(os.Getenv("REGION")),
+	})
+	topicArn := os.Getenv("TOPIC_ARN")
+	if err != nil {
+		return "Error" + err.Error()
+	} else {
+		svcsns := sns.New(sess)
+		result, err := svcsns.Publish(&sns.PublishInput{
+			Message:  &Message,
+			TopicArn: &topicArn,
+		})
+		if err != nil {
+			return "Error: " + err.Error()
+		} else {
+			fmt.Println("Published on " + *result.MessageId)
+			return *result.MessageId
+		}
+	}
+
+}
+func HandleLambdaEvent() {
+	fmt.Println(SnsMessageSender(IamLister()))
+}
 func main() {
-//	lambda.Start(HandleLambdaEvent)
-	fmt.Println(IamLister())
+	lambda.Start(HandleLambdaEvent)
 }
